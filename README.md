@@ -95,8 +95,6 @@ If you just want to try out Atea, you can grab the pre-packaged `dmg` file [here
 In order to build, you'll need [Leiningen](https://github.com/technomancy/leiningen), Clojure's build and dependency tool; first you have to make a standalone jar:
 
     lein deps
-	lein native-deps
-	cp native/libtray.jnilib .
 	lein uberjar
 
 At this point you can just start the jar and it will work.
