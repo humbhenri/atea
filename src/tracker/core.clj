@@ -1,22 +1,35 @@
 (ns tracker.core
   (:require [clojure.string :as string])
-  (:import org.jdesktop.jdic.tray.internal.impl.MacSystemTrayService)
-  (:import org.jdesktop.jdic.tray.internal.impl.MacTrayIconService)
+  (:import [java.awt SystemTray PopupMenu TrayIcon MenuItem])
   (:gen-class))
 
 (defn load-icon [name]
   (javax.swing.ImageIcon. (javax.imageio.ImageIO/read (clojure.java.io/resource name))))
 
 (defn get-tray []
-  (MacSystemTrayService/getInstance))
+  (SystemTray/getSystemTray))
 
 (defn create-menu []
-  (MacTrayIconService.))
+  (PopupMenu.))
 
 (defn action [f]
   (reify java.awt.event.ActionListener 
     (actionPerformed 
       [this event] (f))))
+
+(defn mouse-clicked [f]
+  (proxy [java.awt.event.MouseAdapter] []
+    (mouseClicked
+      [event] (f))))
+
+(defn add-item 
+  ([menu item index listener]
+    (let [menu-item (MenuItem. item)]
+      (.addActionListener menu-item listener)
+      (.insert menu menu-item index)))
+  ([menu item listener]
+    (add-item menu item (.getItemCount menu) listener)))
+
 
 ; Item management ----------------------------------------------------------
 
@@ -49,11 +62,11 @@
         (fn [add-sep? title sec-items]
           (if add-sep?
             (.addSeparator menu)) 
-          (.addItem menu title nil)
+          (add-item menu title nil)
           (.addSeparator menu)
           (doseq
             [item sec-items]
-            (.addItem
+            (add-item
               menu
               (if (= (key-task item) (key-task active))
                 (str "➡ " (:description item))  ;◆✦●
@@ -69,12 +82,12 @@
           (doseq [[prj items] (next prjs)] (add-section true prj items)))]
 
     ; remove old items
-    (doseq [index (range (.getItemCount menu))] (.removeItem menu 0)) 
+    (.removeAll menu) 
 
     ; add "now working" section
     (when active
       (let [stime (to-mins (- (now) (:since active)))]
-        (.addItem
+        (add-item
           menu
           (str "Session: "
                (to-str stime)
@@ -82,19 +95,19 @@
                (to-str (+ (:time active) stime)))
           nil) 
         (.addSeparator menu)
-        (.addItem menu "Stop work" (action #(deactfn)))
+        (add-item menu "Stop work" (action #(deactfn)))
         (.addSeparator menu))) 
 
     ; add items sorted by priority and project
     (let [part-items (sort (parition-items items))]
       (if (first part-items)
         (add-priority false (key (first part-items)) (val (first part-items)))
-        (.addItem menu (str "No tasks in " file) nil)) 
+        (add-item menu (str "No tasks in " file) nil)) 
       (doseq [[pri prjs] (next part-items)] (add-priority true pri prjs)))
     
     ; quit menu item
     (.addSeparator menu)
-    (.addItem menu "Quit Atea" (action #((deactfn) (System/exit 0))))))
+    (add-item menu "Quit Atea" (action #((deactfn) (System/exit 0))))))
 
 ; IO -----------------------------------------------------------------------
 
@@ -254,13 +267,13 @@
   (let [old-file (atom nil)
         icon-inactive (load-icon "clock-inactive.png")
         icon-active (load-icon "clock.png")
-        menu (create-menu)]
-    (.addTrayIcon (get-tray) menu 0)
-    (.setIcon menu icon-inactive)
-    (.setActionListener
-      menu
-      (action #(let [file (:file (load-cfg))
-                     tfile (ttname file)
+        menu (create-menu)
+        trayIcon (TrayIcon. (.getImage icon-inactive) "" menu)
+        file (:file (load-cfg))]
+    (.add (get-tray) trayIcon)
+    (.addMouseListener 
+      trayIcon
+      (mouse-clicked #(let [tfile (ttname file)
                      tasks (load-tasks file)
                      ttasks (load-ttasks tfile)]
 
@@ -278,9 +291,9 @@
                    (update-items file menu tasks (:active ttasks)
                                  (fn [new-active]
                                    (write-ttasks tfile tasks ttasks new-active)
-                                   (.setIcon menu icon-active)) 
+                                   (.setImage trayIcon (.getImage icon-active))) 
                                  (fn []
                                    (write-ttasks tfile tasks ttasks nil)
-                                   (.setIcon menu icon-inactive))))))) 
+                                   (.setImage trayIcon (.getImage icon-inactive)))))))) 
    (Thread/sleep (Long/MAX_VALUE))))
 
