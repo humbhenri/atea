@@ -181,7 +181,6 @@
                  #(not (re-matches #"\s*" (first %)))
                  (partition-by (partial re-matches #"\s*") lines))
           tasks (zipmap (range (count pris)) pris)]
-
       ; flatten into maps
       (for [[pri items] tasks
             task items] (into (parse-task task) {:priority pri :time 0}))) 
@@ -271,29 +270,28 @@
         trayIcon (TrayIcon. (.getImage icon-inactive) "" menu)
         file (:file (load-cfg))]
     (.add (get-tray) trayIcon)
-    (.addMouseListener 
-      trayIcon
-      (mouse-clicked #(let [tfile (ttname file)
-                     tasks (load-tasks file)
-                     ttasks (load-ttasks tfile)]
+    (watch-file 
+     file
+     500
+      #(let [tfile (ttname file)
+              tasks (load-tasks file)
+              ttasks (load-ttasks tfile)]
 
-                 ; if file *name* changed, write out old one first
-                 (when (and @old-file (not= @old-file file))
-                   ; we presume this is gonna work since it worked last time :)
-                   (write-ttasks (ttname @old-file)
-                                 (load-tasks @old-file)
-                                 (load-ttasks (ttname @old-file))
-                                 nil))
+                                        ; if file *name* changed, write out old one first
+          (when (and @old-file (not= @old-file file))
+                                        ; we presume this is gonna work since it worked last time :)
+            (write-ttasks (ttname @old-file)
+                          (load-tasks @old-file)
+                          (load-ttasks (ttname @old-file))
+                          nil))
 
-                 ; update menu
-                 (when tasks
-                   (reset! old-file file) 
-                   (update-items file menu tasks (:active ttasks)
-                                 (fn [new-active]
-                                   (write-ttasks tfile tasks ttasks new-active)
-                                   (.setImage trayIcon (.getImage icon-active))) 
-                                 (fn []
-                                   (write-ttasks tfile tasks ttasks nil)
-                                   (.setImage trayIcon (.getImage icon-inactive)))))))) 
-   (Thread/sleep (Long/MAX_VALUE))))
-
+                                        ; update menu
+          (when tasks
+            (reset! old-file file) 
+            (update-items file menu tasks (:active ttasks)
+                          (fn [new-active]
+                            (write-ttasks tfile tasks ttasks new-active)
+                            (.setImage trayIcon (.getImage icon-active))) 
+                          (fn []
+                            (write-ttasks tfile tasks ttasks nil)
+                            (.setImage trayIcon (.getImage icon-inactive)))))))))
